@@ -108,7 +108,7 @@ func hasInteractiveTextOutput(cmd *cobra.Command) bool {
 	}
 
 	switch strings.ToLower(flag.Value.String()) {
-	case "text", "table", "wide", "graph", "pretty", "compact":
+	case "text", "table", "wide", "graph", "sixel", "pretty", "compact":
 		return true
 	default:
 		return false

@@ -122,7 +122,7 @@ func TestShouldNotifySkills_SuppressesNonInteractiveCases(t *testing.T) {
 }
 
 func TestHasInteractiveTextOutput_AllowsKnownTextFormats(t *testing.T) {
-	tests := []string{"text", "table", "wide", "graph", "pretty", "compact"}
+	tests := []string{"text", "table", "wide", "graph", "sixel", "pretty", "compact"}
 	for _, format := range tests {
 		t.Run(format, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "list"}

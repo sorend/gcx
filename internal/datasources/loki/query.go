@@ -134,7 +134,7 @@ backend's own line limits, so it can undercount a busy time range.`,
 				return fmt.Errorf("query failed: %w", err)
 			}
 
-			if shared.IO.OutputFormat == "graph" {
+			if shared.IO.OutputFormat == "graph" || shared.IO.OutputFormat == "sixel" {
 				if summary, ok := graphLimitHint(limit, countEntries(resp)); ok {
 					cmdio.EmitHint(cmd.ErrOrStderr(), summary, "")
 				}

@@ -77,7 +77,7 @@ mechanism because agents that need the full data can no longer retrieve it.
 
 ### 1.2 Custom Codecs
 
-Commands register additional formats (e.g. `text`, `wide`, `graph`) via
+Commands register additional formats (e.g. `text`, `wide`, `graph`, `sixel`) via
 `io.Options.RegisterCustomCodec()`. The `text` codec is a Kubernetes-style
 table printer (`k8s.io/cli-runtime/pkg/printers.NewTablePrinter`).
 

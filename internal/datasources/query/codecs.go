@@ -2,8 +2,11 @@ package query
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"time"
 
+	"github.com/grafana/gcx/internal/agent"
 	"github.com/grafana/gcx/internal/format"
 	"github.com/grafana/gcx/internal/graph"
 	cmdio "github.com/grafana/gcx/internal/output"
@@ -22,6 +25,7 @@ import (
 	"github.com/grafana/gcx/internal/query/pyroscope"
 	querysql "github.com/grafana/gcx/internal/query/sql"
 	"github.com/grafana/gcx/internal/query/tempo"
+	"github.com/grafana/gcx/internal/terminal"
 )
 
 type queryTableCodec struct{}
@@ -149,6 +153,20 @@ func (c *queryGraphCodec) Format() format.Format {
 }
 
 func (c *queryGraphCodec) Encode(w io.Writer, data any) error {
+	chartData, err := chartDataFor("graph", data)
+	if err != nil {
+		return err
+	}
+	return graph.RenderChart(w, chartData, graph.DefaultChartOptions())
+}
+
+func (c *queryGraphCodec) Decode(io.Reader, any) error {
+	return errors.New("graph codec does not support decoding")
+}
+
+// chartDataFor converts a datasource query response into chart data for the
+// named chart format ("graph" or "sixel"). Errors name that format.
+func chartDataFor(formatName string, data any) (*graph.ChartData, error) {
 	var chartData *graph.ChartData
 	var err error
 
@@ -174,11 +192,11 @@ func (c *queryGraphCodec) Encode(w io.Writer, data any) error {
 	case *azuremonitor.QueryResponse:
 		chartData, err = graph.FromAzureMonitorResponse(resp)
 	case *azuremonitor.TableResponse:
-		return errors.New("graph output is not supported for KQL table results; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "KQL table results")
 	case *tempo.SearchResponse:
-		return errors.New("graph output is not supported for trace search results; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "trace search results")
 	case *infinity.QueryResponse:
-		return errors.New("graph output is not supported for Infinity queries; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "Infinity queries")
 	case *tempo.MetricsResponse:
 		chartData, err = graph.FromTempoMetricsResponse(resp)
 	case *influxdb.QueryResponse:
@@ -188,32 +206,63 @@ func (c *queryGraphCodec) Encode(w io.Writer, data any) error {
 	case *opensearch.MetricsResponse:
 		chartData, err = graph.FromOpenSearchResponse(resp)
 	case *querysql.QueryResponse:
-		return errors.New("graph output is not supported for SQL datasource queries; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "SQL datasource queries")
 	case []clickhouse.TableInfo:
-		return errors.New("graph output is not supported for ClickHouse list-tables; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "ClickHouse list-tables")
 	case []clickhouse.ColumnInfo:
-		return errors.New("graph output is not supported for ClickHouse describe-table; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "ClickHouse describe-table")
 	case athena.StringList:
-		return errors.New("graph output is not supported for Athena discovery; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "Athena discovery")
 	case bigquery.StringList:
-		return errors.New("graph output is not supported for BigQuery list-datasets; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "BigQuery list-datasets")
 	case []bigquery.TableInfo:
-		return errors.New("graph output is not supported for BigQuery list-tables; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "BigQuery list-tables")
 	case []bigquery.ColumnInfo:
-		return errors.New("graph output is not supported for BigQuery describe-table; use -o table/json/yaml")
+		return nil, unsupportedChartData(formatName, "BigQuery describe-table")
 	default:
-		return errors.New("invalid data type for graph codec")
+		return nil, fmt.Errorf("invalid data type for %s codec", formatName)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return chartData, nil
+}
+
+func unsupportedChartData(formatName, source string) error {
+	return fmt.Errorf("%s output is not supported for %s; use -o table/json/yaml", formatName, source)
+}
+
+// querySixelCodec renders the same charts as the graph codec as Sixel
+// graphics. It is only usable on an interactive terminal that advertises Sixel.
+type querySixelCodec struct{}
+
+// sixelProbeTimeout bounds the wait for the terminal's capability reply.
+// Remote terminals (e.g. over SSH) can be slow to answer, so this is generous.
+const sixelProbeTimeout = time.Second
+
+func (c *querySixelCodec) Format() format.Format {
+	return "sixel"
+}
+
+func (c *querySixelCodec) Encode(w io.Writer, data any) error {
+	chartData, err := chartDataFor("sixel", data)
 	if err != nil {
 		return err
 	}
-
-	opts := graph.DefaultChartOptions()
-	return graph.RenderChart(w, chartData, opts)
+	if agent.IsAgentMode() {
+		return errors.New("sixel output is not available in agent mode; use -o json, yaml or agents")
+	}
+	if !terminal.StdoutIsTerminal() {
+		return errors.New("sixel output requires an interactive terminal; use -o graph, json or yaml when piping")
+	}
+	if !terminal.SixelSupported(sixelProbeTimeout) {
+		return errors.New("this terminal does not advertise Sixel graphics support; use -o graph instead")
+	}
+	return graph.RenderSixel(w, chartData, graph.DefaultSixelOptions())
 }
 
-func (c *queryGraphCodec) Decode(io.Reader, any) error {
-	return errors.New("graph codec does not support decoding")
+func (c *querySixelCodec) Decode(io.Reader, any) error {
+	return errors.New("sixel codec does not support decoding")
 }
 
 type queryJSONCodec struct {
@@ -259,8 +308,8 @@ func (c *queryYAMLCodec) Decode(r io.Reader, v any) error {
 	return c.inner.Decode(r, v)
 }
 
-// RegisterCodecs registers the table and wide codecs, plus graph when enabled,
-// on the given IO options.
+// RegisterCodecs registers the table and wide codecs, plus graph and sixel when
+// enabled, on the given IO options.
 func RegisterCodecs(ioOpts *cmdio.Options, enableGraph bool) {
 	ioOpts.RegisterCustomCodec("table", &queryTableCodec{})
 	ioOpts.RegisterCustomCodec("wide", &queryWideCodec{})
@@ -268,6 +317,7 @@ func RegisterCodecs(ioOpts *cmdio.Options, enableGraph bool) {
 	ioOpts.RegisterCustomCodec("yaml", &queryYAMLCodec{inner: format.NewYAMLCodec()})
 	if enableGraph {
 		ioOpts.RegisterCustomCodec("graph", &queryGraphCodec{})
+		ioOpts.RegisterCustomCodec("sixel", &querySixelCodec{})
 	}
 	ioOpts.DefaultFormat("table")
 }

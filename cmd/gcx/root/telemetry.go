@@ -112,7 +112,7 @@ func changedFlagNames(cmd *cobra.Command) string {
 //nolint:gochecknoglobals
 var knownOutputFormats = map[string]bool{
 	"agents": true, "compact": true, "graph": true, "json": true,
-	"pretty": true, "table": true, "text": true, "wide": true, "yaml": true,
+	"pretty": true, "sixel": true, "table": true, "text": true, "wide": true, "yaml": true,
 }
 
 func resolvedOutputFormat(cmd *cobra.Command) string {

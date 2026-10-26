@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grafana/gcx/internal/agent"
 	dsquery "github.com/grafana/gcx/internal/datasources/query"
 	cmdio "github.com/grafana/gcx/internal/output"
 	"github.com/grafana/gcx/internal/query/azuremonitor"
@@ -18,6 +19,7 @@ import (
 	"github.com/grafana/gcx/internal/query/opensearch"
 	"github.com/grafana/gcx/internal/query/prometheus"
 	"github.com/grafana/gcx/internal/query/tempo"
+	"github.com/grafana/gcx/internal/terminal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -413,5 +415,63 @@ func TestQueryCodecsCloudMonitoring(t *testing.T) {
 		var out bytes.Buffer
 		require.NoError(t, newIO("graph").Encode(&out, resp))
 		assert.Contains(t, out.String(), "cpu/utilization")
+	})
+}
+
+func TestSixelCodec(t *testing.T) {
+	newSixelIO := func(enableGraph bool) *cmdio.Options {
+		t.Helper()
+		ioOpts := &cmdio.Options{OutputFormat: "sixel"}
+		dsquery.RegisterCodecs(ioOpts, enableGraph)
+		return ioOpts
+	}
+	logVolume := &loki.QueryResponse{
+		Data: loki.QueryResultData{
+			Result: []loki.StreamEntry{{
+				Stream: map[string]string{"app": "foo"},
+				Values: []loki.LogEntry{{Timestamp: "1700000000000000000", Line: "something happened"}},
+			}},
+		},
+	}
+
+	t.Run("is registered only alongside graph", func(t *testing.T) {
+		var out bytes.Buffer
+		err := newSixelIO(false).Encode(&out, logVolume)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown output format")
+	})
+
+	t.Run("rejects unsupported response types", func(t *testing.T) {
+		var out bytes.Buffer
+		err := newSixelIO(true).Encode(&out, &tempo.SearchResponse{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "sixel output is not supported for trace search results")
+	})
+
+	t.Run("rejects agent mode without probing the terminal", func(t *testing.T) {
+		prev := agent.IsAgentMode()
+		agent.SetFlag(true)
+		t.Cleanup(func() { agent.SetFlag(prev) })
+
+		var out bytes.Buffer
+		err := newSixelIO(true).Encode(&out, logVolume)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "agent mode")
+		assert.NotContains(t, out.String(), "\x1bP")
+	})
+
+	t.Run("rejects piped output", func(t *testing.T) {
+		if terminal.StdoutIsTerminal() {
+			t.Skip("stdout is a terminal in this test run")
+		}
+		prev := agent.IsAgentMode()
+		agent.SetFlag(false)
+		t.Cleanup(func() { agent.SetFlag(prev) })
+
+		var out bytes.Buffer
+		err := newSixelIO(true).Encode(&out, logVolume)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires an interactive terminal")
+		assert.NotContains(t, out.String(), "\x1bP")
 	})
 }

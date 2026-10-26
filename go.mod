@@ -50,6 +50,7 @@ require (
 	github.com/grafana/mcp-doc-server v1.0.0
 	github.com/grafana/otel-checker v0.4.0
 	github.com/itchyny/gojq v0.12.19
+	github.com/mattn/go-sixel v0.0.14
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/common v0.72.1
 	github.com/zalando/go-keyring v0.2.8
@@ -157,6 +158,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
+	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/stretchr/objx v0.8.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect

@@ -361,6 +361,8 @@ Built-in codecs: `json`, `yaml`, and `agents` (always available). Commands regis
 
 The `graph` codec is a special-purpose output format available on per-kind `query` subcommands (`metrics query`, `logs query`, `profiles metrics`, etc.) and `synth checks status`. It renders Prometheus or Loki query results (or check status metrics) as a terminal line chart using `ntcharts` and `lipgloss` (via `internal/graph`). Terminal width is detected at render time via `golang.org/x/term`.
 
+The `sixel` codec is registered alongside `graph` and renders the same chart data as a Sixel image (`internal/graph/sixel.go`, encoded with `github.com/mattn/go-sixel`). It is only available on datasource query commands. Before rendering, it checks that stdout is a TTY and sends a DA1 query (`internal/terminal/sixel.go`) to confirm that the terminal advertises Sixel support. It fails in agent mode.
+
 The `wide` codec is available on `slo definitions list`, `slo reports list`, and `synth checks status`. It shows additional detail columns compared to the default `text` table codec.
 
 ### `FieldSelectCodec` — JSON Field Filtering
